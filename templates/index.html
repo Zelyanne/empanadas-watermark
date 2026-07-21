@@ -100,7 +100,7 @@
         #gallery h2 { font-size: 16px; margin-bottom: 12px; color: #333; }
         .grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
             gap: 12px;
         }
         .grid-item {
@@ -111,7 +111,7 @@
         }
         .grid-item img {
             width: 100%;
-            height: 200px;
+            height: 180px;
             object-fit: cover;
             display: block;
             cursor: pointer;
@@ -127,7 +127,7 @@
         .grid-item .save-btn {
             display: block;
             width: 100%;
-            padding: 8px;
+            padding: 10px;
             background: #D4AF37;
             color: #fff;
             border: none;
@@ -136,6 +136,13 @@
             -webkit-tap-highlight-color: transparent;
         }
         .grid-item .save-btn:active { background: #c19b2e; }
+
+        #upload-hint {
+            font-size: 13px;
+            color: #999;
+            margin-top: 10px;
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -146,6 +153,7 @@
     <form id="uploadForm" enctype="multipart/form-data">
         <div id="drop-area">
             <p>Drop images here or <strong>browse</strong></p>
+            <div id="upload-hint">(Works best on desktop)</div>
             <input type="file" name="images" id="fileInput" accept="image/*" multiple required hidden>
         </div>
 
@@ -163,10 +171,11 @@
         </div>
 
         <div class="file-list" id="fileList"></div>
+        <div id="upload-hint">Tap "Save to Photos" on any image, then iOS share sheet</div>
 
         <div id="progress-wrap">
             <div id="progress-bar"><div id="progress-fill"></div></div>
-            <div id="progress-text"></div>
+            <div id="progress-text">Processing...</div>
         </div>
 
         <div id="status"></div>
@@ -176,7 +185,6 @@
     <div id="gallery">
         <h2 id="gallery-title">Watermarked images</h2>
         <div class="grid" id="galleryGrid"></div>
-        <button class="btn" id="zipBtn" style="margin-top:16px;display:none">Download all as ZIP</button>
     </div>
 </div>
 
@@ -192,12 +200,6 @@ const status = document.getElementById('status');
 const submitBtn = document.getElementById('submitBtn');
 const gallery = document.getElementById('gallery');
 const galleryGrid = document.getElementById('galleryGrid');
-const galleryTitle = document.getElementById('gallery-title');
-const zipBtn = document.getElementById('zipBtn');
-const opacitySlider = document.getElementById('opacitySlider');
-const sizeSlider = document.getElementById('sizeSlider');
-const opacityVal = document.getElementById('opacityVal');
-const sizeVal = document.getElementById('sizeVal');
 
 let latestZipBlob = null;
 
@@ -214,7 +216,8 @@ fileInput.addEventListener('change', () => selectFiles(fileInput.files));
 function selectFiles(list) {
     if (list.length === 0) return;
     fileInput.files = list;
-    fileList.innerHTML = Array.from(list).map(f => '<span>' + f.name + '</span>').join('');
+    fileList.innerHTML = Array.from(list).map(f => '<span>• ' + f.name + '</span>').join('');
+    uploadHint.style.display = 'none';
     submitBtn.disabled = false;
     submitBtn.textContent = 'Watermark ' + list.length + ' image(s)';
     status.textContent = '';
@@ -226,14 +229,15 @@ function selectFiles(list) {
 form.addEventListener('submit', async e => {
     e.preventDefault();
     const files = fileInput.files;
-    if (!files || files.length === 0) return;
+    if (!files || files.length === 0) {
+        status.textContent = 'Please select images first';
+        return;
+    }
 
     submitBtn.disabled = true;
     submitBtn.textContent = 'Processing...';
     progressWrap.style.display = 'block';
-    progressFill.style.width = '0%';
     gallery.style.display = 'none';
-    galleryGrid.innerHTML = '';
     latestZipBlob = null;
 
     const fd = new FormData();
@@ -266,9 +270,7 @@ form.addEventListener('submit', async e => {
 
         const zip = await JSZip.loadAsync(latestZipBlob);
         const entries = Object.entries(zip.files).filter(([n]) => !n.startsWith('_error_') && !n.startsWith('__'));
-        galleryTitle.textContent = 'Watermarked images (' + entries.length + ')';
         galleryGrid.innerHTML = '';
-
         for (const [name, file] of entries) {
             const blob = await file.async('blob');
             const url = URL.createObjectURL(blob);
@@ -281,25 +283,12 @@ form.addEventListener('submit', async e => {
         }
 
         gallery.style.display = 'block';
-        zipBtn.style.display = files.length > 1 ? 'inline-block' : 'none';
         progressWrap.style.display = 'none';
-        status.textContent = '✓ Done — long-press or tap Save to add to your gallery';
+        status.textContent = '✓ Done — ' + files.length + ' image(s). Tap "Save to Photos".';
     } catch (err) {
         status.textContent = 'Error: ' + err.message;
         reset();
     }
-});
-
-zipBtn.addEventListener('click', () => {
-    if (!latestZipBlob) return;
-    const url = URL.createObjectURL(latestZipBlob);
-    const link = document.createElement('a');
-    link.download = 'empanadas_watermarked.zip';
-    link.href = url;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
 });
 
 document.addEventListener('click', e => {
