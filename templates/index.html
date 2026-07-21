@@ -136,13 +136,6 @@
             -webkit-tap-highlight-color: transparent;
         }
         .grid-item .save-btn:active { background: #c19b2e; }
-
-        #upload-hint {
-            font-size: 13px;
-            color: #999;
-            margin-top: 10px;
-            display: none;
-        }
     </style>
 </head>
 <body>
@@ -153,25 +146,23 @@
     <form id="uploadForm" enctype="multipart/form-data">
         <div id="drop-area">
             <p>Drop images here or <strong>browse</strong></p>
-            <div id="upload-hint">(Works best on desktop)</div>
-            <input type="file" name="images" id="fileInput" accept="image/*" multiple required hidden>
+            <input type="file" id="fileInput" accept="image/*" multiple hidden>
         </div>
 
         <div class="controls">
             <label>
                 Opacity
-                <input type="range" name="opacity" id="opacitySlider" min="1" max="100" value="25">
+                <input type="range" id="opacitySlider" min="1" max="100" value="25">
                 <span id="opacityVal">25%</span>
             </label>
             <label>
                 Logo size
-                <input type="range" name="size" id="sizeSlider" min="5" max="80" value="30">
+                <input type="range" id="sizeSlider" min="5" max="80" value="30">
                 <span id="sizeVal">30%</span>
             </label>
         </div>
 
         <div class="file-list" id="fileList"></div>
-        <div id="upload-hint">Tap "Save to Photos" on any image, then iOS share sheet</div>
 
         <div id="progress-wrap">
             <div id="progress-bar"><div id="progress-fill"></div></div>
@@ -179,7 +170,7 @@
         </div>
 
         <div id="status"></div>
-        <button type="submit" class="btn" id="submitBtn" disabled>Watermark images</button>
+        <button type="button" class="btn" id="submitBtn" disabled>Watermark images</button>
     </form>
 
     <div id="gallery">
@@ -189,7 +180,6 @@
 </div>
 
 <script>
-const form = document.getElementById('uploadForm');
 const dropArea = document.getElementById('drop-area');
 const fileInput = document.getElementById('fileInput');
 const fileList = document.getElementById('fileList');
@@ -200,7 +190,12 @@ const status = document.getElementById('status');
 const submitBtn = document.getElementById('submitBtn');
 const gallery = document.getElementById('gallery');
 const galleryGrid = document.getElementById('galleryGrid');
+const opacitySlider = document.getElementById('opacitySlider');
+const sizeSlider = document.getElementById('sizeSlider');
+const opacityVal = document.getElementById('opacityVal');
+const sizeVal = document.getElementById('sizeVal');
 
+let selectedFiles = [];
 let latestZipBlob = null;
 
 opacitySlider.addEventListener('input', () => { opacityVal.textContent = opacitySlider.value + '%'; });
@@ -209,27 +204,30 @@ sizeSlider.addEventListener('input', () => { sizeVal.textContent = sizeSlider.va
 ['dragenter','dragover','dragleave','drop'].forEach(e => {
     dropArea.addEventListener(e, e => { e.preventDefault(); e.stopPropagation(); });
 });
-dropArea.addEventListener('drop', e => { selectFiles(e.dataTransfer.files); });
-dropArea.addEventListener('click', () => fileInput.click());
-fileInput.addEventListener('change', () => selectFiles(fileInput.files));
 
-function selectFiles(list) {
-    if (list.length === 0) return;
-    fileInput.files = list;
-    fileList.innerHTML = Array.from(list).map(f => '<span>• ' + f.name + '</span>').join('');
-    uploadHint.style.display = 'none';
+dropArea.addEventListener('drop', e => {
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) onFiles(files);
+});
+
+dropArea.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => {
+    if (fileInput.files.length > 0) onFiles(Array.from(fileInput.files));
+});
+
+function onFiles(files) {
+    selectedFiles = files;
+    fileList.innerHTML = files.map((f, i) => '<span>' + (i+1) + '. ' + f.name + ' (' + (f.size/1024).toFixed(0) + ' KB)</span>').join('');
     submitBtn.disabled = false;
-    submitBtn.textContent = 'Watermark ' + list.length + ' image(s)';
+    submitBtn.textContent = 'Watermark ' + files.length + ' image(s)';
     status.textContent = '';
     gallery.style.display = 'none';
     galleryGrid.innerHTML = '';
     latestZipBlob = null;
 }
 
-form.addEventListener('submit', async e => {
-    e.preventDefault();
-    const files = fileInput.files;
-    if (!files || files.length === 0) {
+submitBtn.addEventListener('click', async () => {
+    if (selectedFiles.length === 0) {
         status.textContent = 'Please select images first';
         return;
     }
@@ -237,11 +235,12 @@ form.addEventListener('submit', async e => {
     submitBtn.disabled = true;
     submitBtn.textContent = 'Processing...';
     progressWrap.style.display = 'block';
+    progressFill.style.width = '0%';
     gallery.style.display = 'none';
     latestZipBlob = null;
 
     const fd = new FormData();
-    for (const f of files) fd.append('images', f);
+    for (const f of selectedFiles) fd.append('images', f);
     fd.append('opacity', opacitySlider.value);
     fd.append('size', sizeSlider.value);
 
@@ -251,8 +250,8 @@ form.addEventListener('submit', async e => {
         if (!res.ok) { status.textContent = 'Error: ' + await res.text(); reset(); return; }
 
         progressText.textContent = 'Downloading...';
+        const total = +res.headers.get('Content-Length');
         const reader = res.body.getReader();
-        const contentLength = +res.headers.get('Content-Length');
         let received = 0;
         const chunks = [];
         while (true) {
@@ -260,31 +259,33 @@ form.addEventListener('submit', async e => {
             if (done) break;
             chunks.push(value);
             received += value.length;
-            if (contentLength) progressFill.style.width = Math.round(received / contentLength * 100) + '%';
-            progressText.textContent = (received / 1024 / 1024).toFixed(1) + ' MB received';
+            if (total) progressFill.style.width = Math.round(received / total * 100) + '%';
+            progressText.textContent = (received / 1024 / 1024).toFixed(1) + ' MB';
         }
         latestZipBlob = new Blob(chunks, { type: 'application/zip' });
-
-        progressText.textContent = 'Extracting images...';
         progressFill.style.width = '100%';
+        progressText.textContent = 'Extracting...';
 
         const zip = await JSZip.loadAsync(latestZipBlob);
-        const entries = Object.entries(zip.files).filter(([n]) => !n.startsWith('_error_') && !n.startsWith('__'));
+        const entries = Object.entries(zip.files).filter(([n]) => !n.startsWith('_error_'));
         galleryGrid.innerHTML = '';
+
         for (const [name, file] of entries) {
             const blob = await file.async('blob');
             const url = URL.createObjectURL(blob);
-            const item = document.createElement('div');
-            item.className = 'grid-item';
-            item.innerHTML = '<img src="' + url + '" alt="' + name + '">' +
+            const div = document.createElement('div');
+            div.className = 'grid-item';
+            div.innerHTML = '<img src="' + url + '" alt="' + name + '">' +
                 '<div class="name">' + name + '</div>' +
                 '<button class="save-btn" data-url="' + url + '" data-name="' + name + '">Save to Photos</button>';
-            galleryGrid.appendChild(item);
+            galleryGrid.appendChild(div);
         }
 
         gallery.style.display = 'block';
         progressWrap.style.display = 'none';
-        status.textContent = '✓ Done — ' + files.length + ' image(s). Tap "Save to Photos".';
+        status.textContent = '✓ Done — ' + selectedFiles.length + ' image(s)';
+        submitBtn.textContent = '✓ Complete';
+        setTimeout(() => { submitBtn.textContent = 'Watermark images'; }, 3000);
     } catch (err) {
         status.textContent = 'Error: ' + err.message;
         reset();
@@ -293,11 +294,9 @@ form.addEventListener('submit', async e => {
 
 document.addEventListener('click', e => {
     if (e.target.classList.contains('save-btn')) {
-        const url = e.target.dataset.url;
-        const name = e.target.dataset.name;
         const a = document.createElement('a');
-        a.href = url;
-        a.download = name;
+        a.href = e.target.dataset.url;
+        a.download = e.target.dataset.name;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
