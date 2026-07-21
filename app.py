@@ -24,7 +24,7 @@ def get_icon():
         icon_cache = raw
     return icon_cache.copy()
 
-def apply_watermark(uploaded_image, opacity=0.45, size_percent=0.30):
+def apply_watermark(uploaded_image, opacity=0.45, size_percent=0.20):
     img = uploaded_image.convert('RGBA')
     icon = get_icon()
 
