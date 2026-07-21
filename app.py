@@ -3,7 +3,7 @@ import io
 import math
 import zipfile
 from flask import Flask, render_template, request, send_file
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageFilter
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024
@@ -16,7 +16,12 @@ icon_cache = None
 def get_icon():
     global icon_cache
     if icon_cache is None:
-        icon_cache = Image.open(ICON_PATH).convert('RGBA')
+        raw = Image.open(ICON_PATH).convert('RGBA')
+        gray = raw.convert('L')
+        alpha = gray.point(lambda x: 0 if x < 40 else min(255, int((x - 40) * (255.0 / 215.0))))
+        alpha = alpha.filter(ImageFilter.GaussianBlur(radius=3))
+        raw.putalpha(alpha)
+        icon_cache = raw
     return icon_cache.copy()
 
 def apply_watermark(uploaded_image, opacity=0.45, size_percent=0.30):
@@ -36,16 +41,13 @@ def apply_watermark(uploaded_image, opacity=0.45, size_percent=0.30):
 
     icon_resized = icon.resize((wm_w, wm_h), Image.LANCZOS)
 
-    r = min(wm_w, wm_h) // 2
-    mask = Image.new('L', (wm_w, wm_h), 0)
-    draw = ImageDraw.Draw(mask)
-    draw.ellipse([(wm_w // 2) - r, (wm_h // 2) - r, (wm_w // 2) + r, (wm_h // 2) + r], fill=255)
-    mask = mask.filter(ImageFilter.GaussianBlur(radius=max(1, r // 8)))
-    mask = mask.point(lambda x: int(x * opacity))
+    r, g, b, a = icon_resized.split()
+    a = a.point(lambda x: int(x * opacity))
+    icon_resized = Image.merge('RGBA', (r, g, b, a))
 
     x = (iw - wm_w) // 2
     y = (ih - wm_h) // 2
-    img.paste(icon_resized, (x, y), mask)
+    img.paste(icon_resized, (x, y), icon_resized)
 
     result = img.convert('RGB')
     return result
