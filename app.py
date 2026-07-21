@@ -33,18 +33,14 @@ def apply_watermark(uploaded_image, opacity=0.25, size_percent=0.30):
         wm_h = icon.height
         wm_w = int(wm_h * icon.width / icon.height)
 
-    icon_resized = icon.resize((wm_w, wm_h), Image.LANCZOS)
-
-    a = icon_resized.split()[3]
-    a = a.point(lambda x: int(x * opacity))
-    icon_resized.putalpha(a)
+    wm_img = Image.new('RGBA', (wm_w, wm_h), (0, 0, 0, 0))
+    wm_img.paste(icon_resized, (0, 0), icon_resized)
 
     x = (iw - wm_w) // 2
     y = (ih - wm_h) // 2
-    img.paste(icon_resized, (x, y), icon_resized)
+    img.paste(wm_img, (x, y), wm_img)
 
-    result = Image.new('RGB', img.size, (255, 255, 255))
-    result.paste(img, mask=img.split()[3])
+    result = img.convert('RGB')
     return result
 
 @app.route('/')
