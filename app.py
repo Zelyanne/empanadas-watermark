@@ -40,15 +40,12 @@ def apply_watermark(uploaded_image, opacity=0.45, size_percent=0.30):
     mask = Image.new('L', (wm_w, wm_h), 0)
     draw = ImageDraw.Draw(mask)
     draw.ellipse([(wm_w // 2) - r, (wm_h // 2) - r, (wm_w // 2) + r, (wm_h // 2) + r], fill=255)
-    mask = mask.filter(ImageFilter.GaussianBlur(radius=max(1, r // 6)))
+    mask = mask.filter(ImageFilter.GaussianBlur(radius=max(1, r // 8)))
     mask = mask.point(lambda x: int(x * opacity))
-
-    overlay = Image.new('RGBA', (wm_w, wm_h), (0, 0, 0, 0))
-    overlay.paste(icon_resized, (0, 0), mask)
 
     x = (iw - wm_w) // 2
     y = (ih - wm_h) // 2
-    img.paste(overlay, (x, y), overlay)
+    img.paste(icon_resized, (x, y), mask)
 
     result = img.convert('RGB')
     return result
