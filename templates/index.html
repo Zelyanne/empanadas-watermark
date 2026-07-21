@@ -97,7 +97,9 @@
             margin-top: 24px;
             text-align: left;
         }
-        #gallery h2 { font-size: 16px; margin-bottom: 12px; color: #333; }
+        #gallery h2 { font-size: 16px; color: #333; margin: 0; }
+        .gallery-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; }
+        .download-all-btn { padding: 10px 24px !important; font-size: 14px !important; }
         .grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -173,8 +175,11 @@
         <button type="button" class="btn" id="submitBtn" disabled>Watermark images</button>
     </form>
 
-    <div id="gallery">
-        <h2 id="gallery-title">Watermarked images</h2>
+        <div id="gallery">
+        <div class="gallery-header">
+            <h2 id="gallery-title">Watermarked images</h2>
+            <button class="btn download-all-btn" id="downloadAllBtn">Download All (ZIP)</button>
+        </div>
         <div class="grid" id="galleryGrid"></div>
     </div>
 </div>
@@ -297,6 +302,14 @@ document.addEventListener('click', e => {
         const a = document.createElement('a');
         a.href = e.target.dataset.url;
         a.download = e.target.dataset.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+    if (e.target.id === 'downloadAllBtn' && latestZipBlob) {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(latestZipBlob);
+        a.download = 'empanadas_watermarked.zip';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
