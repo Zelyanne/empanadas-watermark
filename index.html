@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Watermark - Empanadas et Régala</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #f5f5f5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 30px 15px;
+        }
+        .card {
+            background: #fff;
+            max-width: 900px;
+            width: 100%;
+            border-radius: 14px;
+            padding: 30px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            text-align: center;
+        }
+        h1 { font-size: 24px; color: #222; }
+        .sub { color: #888; margin: 6px 0 24px; font-size: 14px; }
+
+        #drop-area {
+            border: 3px dashed #D4AF37;
+            border-radius: 10px;
+            padding: 36px 20px;
+            cursor: pointer;
+            transition: background .2s;
+            margin-bottom: 20px;
+        }
+        #drop-area:hover { background: #fef9ed; }
+        #drop-area p { font-size: 15px; color: #555; }
+
+        .controls {
+            display: flex;
+            gap: 30px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin: 18px 0;
+        }
+        .controls label {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .controls input[type="range"] { width: 180px; }
+
+        #preview-wrap {
+            display: none;
+            margin: 20px 0;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #eee;
+        }
+        #preview-wrap canvas { display: block; width: 100%; height: auto; }
+
+        .btn {
+            background: #D4AF37;
+            color: #fff;
+            border: none;
+            padding: 12px 30px;
+            font-size: 15px;
+            font-weight: 600;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: background .2s, transform .15s;
+        }
+        .btn:hover { background: #c19b2e; transform: translateY(-1px); }
+        .btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+        .badge {
+            display: inline-block;
+            background: #D4AF37;
+            color: #fff;
+            font-size: 12px;
+            padding: 3px 12px;
+            border-radius: 12px;
+            margin-top: 14px;
+        }
+
+        #status {
+            margin-top: 12px;
+            font-size: 13px;
+            color: #666;
+            min-height: 20px;
+        }
+        #status.error { color: #c0392b; }
+    </style>
+</head>
+<body>
+<div class="card">
+    <h1>Empanadas et Régala</h1>
+    <p class="sub">Drop any image — your logo is placed in the center</p>
+
+    <div id="drop-area">
+        <p>Drop images here or <strong>browse</strong></p>
+        <input type="file" id="fileInput" accept="image/*" multiple hidden>
+    </div>
+
+    <div class="controls">
+        <label>
+            Opacity
+            <input type="range" id="opacitySlider" min="1" max="100" value="25">
+            <span id="opacityVal">25%</span>
+        </label>
+        <label>
+            Logo size
+            <input type="range" id="sizeSlider" min="5" max="80" value="30">
+            <span id="sizeVal">30%</span>
+        </label>
+    </div>
+
+    <div id="preview-wrap">
+        <canvas id="previewCanvas"></canvas>
+    </div>
+
+    <button class="btn" id="downloadBtn" disabled>Download all</button>
+    <div id="fileCount" class="badge" style="display:none"></div>
+    <div id="status"></div>
+</div>
+
+<script>
+const dropArea = document.getElementById('drop-area');
+const fileInput = document.getElementById('fileInput');
+const previewWrap = document.getElementById('preview-wrap');
+const canvas = document.getElementById('previewCanvas');
+const ctx = canvas.getContext('2d');
+const downloadBtn = document.getElementById('downloadBtn');
+const fileCount = document.getElementById('fileCount');
+const statusEl = document.getElementById('status');
+const opacitySlider = document.getElementById('opacitySlider');
+const sizeSlider = document.getElementById('sizeSlider');
+const opacityVal = document.getElementById('opacityVal');
+const sizeVal = document.getElementById('sizeVal');
+
+let files = [];
+let currentIndex = 0;
+let watermarkReady = false;
+
+function status(msg, isError) {
+    statusEl.textContent = msg;
+    statusEl.className = isError ? 'error' : '';
+}
+
+const watermark = new Image();
+watermark.onload = () => { watermarkReady = true; status('Logo loaded'); };
+watermark.onerror = () => {
+    status('Could not load icone.jpeg — using fallback circle', true);
+    watermark.src = 'data:image/svg+xml,' + encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200">' +
+        '<circle cx="100" cy="100" r="90" fill="none" stroke="#D4AF37" stroke-width="4"/>' +
+        '<text x="100" y="110" text-anchor="middle" fill="#D4AF37" font-size="14" font-family="sans-serif">LOGO</text></svg>'
+    );
+    watermark.onload = () => { watermarkReady = true; };
+};
+watermark.src = 'icone.jpeg?' + Date.now();
+
+opacitySlider.addEventListener('input', () => {
+    opacityVal.textContent = opacitySlider.value + '%';
+    renderPreview();
+});
+sizeSlider.addEventListener('input', () => {
+    sizeVal.textContent = sizeSlider.value + '%';
+    renderPreview();
+});
+
+function renderPreview() {
+    if (files.length === 0 || !watermarkReady) return;
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = e => {
+        img.onload = () => {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, 0, 0);
+            drawWatermark();
+            previewWrap.style.display = 'block';
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(files[currentIndex]);
+}
+
+function drawWatermark() {
+    if (!watermarkReady) return;
+    const opacity = opacitySlider.value / 100;
+    const sizePercent = sizeSlider.value / 100;
+    let w = canvas.width * sizePercent;
+    let h = (watermark.naturalHeight / watermark.naturalWidth) * w;
+    if (w > watermark.naturalWidth) { w = watermark.naturalWidth; h = (watermark.naturalHeight / watermark.naturalWidth) * w; }
+    if (h > watermark.naturalHeight) { h = watermark.naturalHeight; w = (watermark.naturalWidth / watermark.naturalHeight) * h; }
+    const x = (canvas.width - w) / 2;
+    const y = (canvas.height - h) / 2;
+    ctx.globalAlpha = opacity;
+    ctx.drawImage(watermark, x, y, w, h);
+    ctx.globalAlpha = 1;
+}
+
+['dragenter','dragover','dragleave','drop'].forEach(e => {
+    dropArea.addEventListener(e, e => { e.preventDefault(); e.stopPropagation(); });
+});
+dropArea.addEventListener('drop', e => { addFiles(e.dataTransfer.files); });
+dropArea.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => addFiles(fileInput.files));
+
+function addFiles(list) {
+    if (list.length === 0) return;
+    files = Array.from(list);
+    status(files.length + ' image(s) loaded');
+    currentIndex = 0;
+    fileCount.textContent = files.length + ' image(s)';
+    fileCount.style.display = '';
+    downloadBtn.disabled = false;
+    if (watermarkReady) renderPreview();
+    else watermark.onload = renderPreview;
+}
+
+downloadBtn.addEventListener('click', async () => {
+    downloadBtn.disabled = true;
+    for (let i = 0; i < files.length; i++) {
+        status('Processing ' + (i + 1) + '/' + files.length + '...');
+        downloadBtn.textContent = (i + 1) + '/' + files.length;
+        await processFile(files[i]);
+    }
+    status('✓ Done — ' + files.length + ' image(s) downloaded');
+    downloadBtn.textContent = '✓ Done';
+    setTimeout(() => { downloadBtn.disabled = false; downloadBtn.textContent = 'Download all'; }, 1500);
+});
+
+function processFile(file) {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = e => {
+            const img = new Image();
+            img.onload = () => {
+                const c = document.createElement('canvas');
+                c.width = img.width;
+                c.height = img.height;
+                const cx = c.getContext('2d');
+                cx.imageSmoothingEnabled = true;
+                cx.imageSmoothingQuality = 'high';
+                cx.drawImage(img, 0, 0);
+
+                const opacity = opacitySlider.value / 100;
+                const sizePercent = sizeSlider.value / 100;
+                let w = img.width * sizePercent;
+                let h = (watermark.naturalHeight / watermark.naturalWidth) * w;
+                if (w > watermark.naturalWidth) { w = watermark.naturalWidth; h = (watermark.naturalHeight / watermark.naturalWidth) * w; }
+                if (h > watermark.naturalHeight) { h = watermark.naturalHeight; w = (watermark.naturalWidth / watermark.naturalHeight) * h; }
+                const x = (img.width - w) / 2;
+                const y = (img.height - h) / 2;
+                cx.globalAlpha = opacity;
+                cx.drawImage(watermark, x, y, w, h);
+                cx.globalAlpha = 1;
+
+                c.toBlob(blob => {
+                    if (!blob) { status('Error: canvas tainted', true); resolve(); return; }
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.download = 'empanadas_' + file.name;
+                    link.href = url;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    setTimeout(() => URL.revokeObjectURL(url), 5000);
+                    setTimeout(resolve, 100);
+                }, 'image/jpeg', 0.92);
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+}
+</script>
+</body>
+</html>
