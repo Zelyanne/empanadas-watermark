@@ -19,7 +19,7 @@ def get_icon():
         icon_cache = Image.open(ICON_PATH).convert('RGBA')
     return icon_cache.copy()
 
-def apply_watermark(uploaded_image, opacity=0.25, size_percent=0.30):
+def apply_watermark(uploaded_image, opacity=0.45, size_percent=0.30):
     img = uploaded_image.convert('RGBA')
     icon = get_icon()
 
